@@ -184,12 +184,11 @@ export function GlobeView({ position, history }: GlobeViewProps) {
         },
       }),
       symbol: {
-        type: 'line-3d',
-        symbolLayers: [{
-          type: 'line',
-          size: segment.style.weight,
-          material: { color: hexToRgba(segment.style.color, segment.style.opacity) },
-        }],
+        type: 'simple-line',
+        color: hexToRgba(segment.style.color, segment.style.opacity),
+        width: segment.style.weight,
+        style: 'solid',
+        cap: 'round',
       } as any,
     }));
 
