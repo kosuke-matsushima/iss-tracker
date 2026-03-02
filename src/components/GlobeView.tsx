@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Graphic from '@arcgis/core/Graphic';
 import ArcGISMap from '@arcgis/core/Map';
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
@@ -27,13 +27,13 @@ const ISS_SVG = [
 
 const ISS_ICON_URL = `data:image/svg+xml;base64,${btoa(ISS_SVG)}`;
 
-function hexToRgba(value: string, alpha: number) {
+function hexToRgbaCss(value: string, alpha: number): string {
   const normalized = value.replace('#', '');
   const r = Number.parseInt(normalized.slice(0, 2), 16);
   const g = Number.parseInt(normalized.slice(2, 4), 16);
   const b = Number.parseInt(normalized.slice(4, 6), 16);
 
-  return [r, g, b, alpha] as [number, number, number, number];
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function GlobeView({ position, history }: GlobeViewProps) {
@@ -41,6 +41,7 @@ export function GlobeView({ position, history }: GlobeViewProps) {
   const viewRef = useRef<SceneView | null>(null);
   const markerGraphicRef = useRef<Graphic | null>(null);
   const trailLayerRef = useRef<GraphicsLayer | null>(null);
+  const [trailLayerReady, setTrailLayerReady] = useState(false);
   const isReadyRef = useRef(false);
   const hasInitialGoToRef = useRef(false);
   const pendingPositionRef = useRef<ISSPosition | null>(null);
@@ -67,12 +68,17 @@ export function GlobeView({ position, history }: GlobeViewProps) {
     const map = new ArcGISMap({
       basemap: 'dark-gray-vector',
     });
-    const trailLayer = new GraphicsLayer();
-    const markerLayer = new GraphicsLayer();
+
+    const trailLayer = new GraphicsLayer({
+      elevationInfo: { mode: 'on-the-ground' },
+    } as any);
+
+    const markerLayer = new GraphicsLayer({
+      elevationInfo: { mode: 'on-the-ground' },
+    } as any);
 
     map.addMany([trailLayer, markerLayer]);
 
-    // ISS icon marker using PointSymbol3D
     const markerGraphic = new Graphic({
       geometry: new Point({ latitude: 0, longitude: 0 }),
       symbol: {
@@ -116,25 +122,21 @@ export function GlobeView({ position, history }: GlobeViewProps) {
     viewRef.current = view;
     trailLayerRef.current = trailLayer;
     markerGraphicRef.current = markerGraphic;
+    setTrailLayerReady(true);
 
     let cancelled = false;
 
     view.when(() => {
       if (cancelled) return;
       isReadyRef.current = true;
-      view.on('mouse-wheel', (event) => event.stopPropagation());
-      view.on('drag', (event) => event.stopPropagation());
       view.on('double-click', (event) => event.stopPropagation());
-      view.on('immediate-double-click', (event) => event.stopPropagation());
 
-      // Apply pending position and do initial goTo
       const pending = pendingPositionRef.current;
       if (pending) {
-        const pt = new Point({
+        markerGraphic.geometry = new Point({
           latitude: pending.latitude,
           longitude: pending.longitude,
         });
-        markerGraphic.geometry = pt;
 
         if (!hasInitialGoToRef.current) {
           hasInitialGoToRef.current = true;
@@ -151,6 +153,7 @@ export function GlobeView({ position, history }: GlobeViewProps) {
       cancelled = true;
       isReadyRef.current = false;
       hasInitialGoToRef.current = false;
+      setTrailLayerReady(false);
       markerGraphicRef.current = null;
       trailLayerRef.current = null;
       viewRef.current = null;
@@ -159,7 +162,6 @@ export function GlobeView({ position, history }: GlobeViewProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update trail segments with LineSymbol3D
   useEffect(() => {
     const trailLayer = trailLayerRef.current;
 
@@ -185,7 +187,7 @@ export function GlobeView({ position, history }: GlobeViewProps) {
       }),
       symbol: {
         type: 'simple-line',
-        color: hexToRgba(segment.style.color, segment.style.opacity),
+        color: hexToRgbaCss(segment.style.color, segment.style.opacity),
         width: segment.style.weight,
         style: 'solid',
         cap: 'round',
@@ -193,9 +195,8 @@ export function GlobeView({ position, history }: GlobeViewProps) {
     }));
 
     trailLayer.addMany(trailGraphics);
-  }, [trailSegments]);
+  }, [trailLayerReady, trailSegments]);
 
-  // Update marker position via geometry mutation (gated by isReadyRef)
   useEffect(() => {
     pendingPositionRef.current = position;
 
@@ -211,7 +212,6 @@ export function GlobeView({ position, history }: GlobeViewProps) {
       longitude: position.longitude,
     });
 
-    // Initial goTo — center camera on ISS once, then keep fixed
     if (view && isReadyRef.current && !hasInitialGoToRef.current) {
       hasInitialGoToRef.current = true;
       view.goTo({
