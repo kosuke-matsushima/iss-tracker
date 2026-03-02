@@ -82,7 +82,7 @@ export function GlobeView({ position, history }: GlobeViewProps) {
           size: 40,
           resource: { href: ISS_ICON_URL },
         }],
-      } as __esri.PointSymbol3DProperties,
+      } as any,
     });
 
     markerLayer.add(markerGraphic);
@@ -190,7 +190,7 @@ export function GlobeView({ position, history }: GlobeViewProps) {
           size: segment.style.weight,
           material: { color: hexToRgba(segment.style.color, segment.style.opacity) },
         }],
-      } as __esri.LineSymbol3DProperties,
+      } as any,
     }));
 
     trailLayer.addMany(trailGraphics);
